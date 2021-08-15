@@ -39,8 +39,8 @@ parser.add_argument('--test_batch_size', type=int, default=1, help='batch size f
 parser.add_argument('--epochs', type=int, default=61, help='number of epochs for training')
 parser.add_argument('--start_epoch', type=int, default=0, help='the start idx of epoch for training')
 parser.add_argument('--savepth_interval', type=int, default=10, help='the training interval of epochs to save model')
-parser.add_argument('--loss_m', type=float, default=0.2, help='weight of the motion loss')
-parser.add_argument('--loss_f', type=float, default=0.01, help='weight of the feature loss')
+parser.add_argument('--loss_m', type=float, default=0, help='weight of the motion loss')
+parser.add_argument('--loss_f', type=float, default=0, help='weight of the feature loss')
 parser.add_argument('--h', type=int, default=256, help='height of input images')
 parser.add_argument('--w', type=int, default=256, help='width of input images')
 parser.add_argument('--c', type=int, default=3, help='channel of input images')
@@ -115,11 +115,10 @@ if args.start_epoch > 0:
         print('Loading mask sucessfully!')
 
         radius = torch.load(radius_dir)['r']
-        updated_R = 0.0 if len(radius) == 0 else radius[-1]
+        updated_R = radius[-1]
         # updated_R = torch.zeros(1, device='cuda')
         print('Loading radius sucessfully!')
         center = torch.load(center_dir)['c']
-        center = torch.from_numpy(center).cuda()
         print('Loading center sucessfully!')
     else:
         args.start_epoch = 0
@@ -139,6 +138,7 @@ for epoch in range(args.start_epoch+1, args.epochs):
 
     for j, (ori_imgs) in enumerate(train_batch):
         if epoch > 1:
+            updated_R = 0.0              # radius initialization
             # conduct erasure
             imgs = ori_imgs              # without erasure
             for n in range(args.t_length):
@@ -169,11 +169,13 @@ for epoch in range(args.start_epoch+1, args.epochs):
         if epoch < 2:    # for center in SVDD
             loss_svdd = torch.zeros(1, device='cuda')
             if epoch == 1:
-                feas[0, ...] = np.mean(fea.detach().cpu().numpy(), 0)
+                feas[0, ...] = np.mean(fea.detach().cpu().numpy(), 0)   #Cyclic mean calculation reduces space complexity
                 if feas[1, ...].all() == 0:
                     feas[1, ...] = feas[0, ...]
                 else:
                     feas[1, ...] = np.mean(feas, 0)
+
+                center = torch.from_numpy(feas[1, ...]).cuda()
 
         else:
             # feature compact loss
@@ -185,8 +187,8 @@ for epoch in range(args.start_epoch+1, args.epochs):
             updated_R = np.quantile(np.sqrt(dist.detach().cpu().numpy()), 1 - nu)
             radius = np.append(radius, updated_R)
 
-        loss = loss_rec + args.loss_m * loss_motion + 0.01*loss_svdd
-        loss.backward()                              # retain_graph=True
+        loss = loss_rec + args.loss_m * loss_motion + args.loss_f *loss_svdd
+        loss.backward()
         optimizer.step()
 
         if j % 1000 == 0:
@@ -210,7 +212,6 @@ for epoch in range(args.start_epoch+1, args.epochs):
     if epoch == 1:
         print('Training is finished')
         # Save the model and the related item
-        center = feas[1, ...]
         state_c = {"c": center}
         torch.save(state_c, os.path.join(log_dir, 'center.pt'))
         state_model = {"model_state_dict": model.state_dict(), "optimizer_state_dict": optimizer.state_dict(), "epoch": epoch}
@@ -229,14 +230,12 @@ for epoch in range(args.start_epoch+1, args.epochs):
         torch.save(state_r, os.path.join(log_dir, 'radius_{}.pt'.format(epoch)))
 
 print('Training is finished')
-# Save the model and the memory items
+# Save the model and the related items
 state_model = {"model_state_dict": model.state_dict(), "optimizer_state_dict": optimizer.state_dict(), "epoch": epoch}
 torch.save(state_model, os.path.join(log_dir, 'model_{}.pth'.format(epoch)))
 state_mask = {"mask": mask_copy, "epoch": epoch}
 torch.save(state_mask, os.path.join(log_dir, 'mask_{}.pt'.format(epoch)))
 state_r = {"r": radius, "epoch": epoch}
 torch.save(state_r, os.path.join(log_dir, 'radius_{}.pt'.format(epoch)))
-
-
 
 
