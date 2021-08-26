@@ -25,3 +25,7 @@ python Train.py --gpus 1 --dataset_path 'your_dataset_directory' --dataset_type 
 Test your own model
 Check your dataset_type (ped2, Avenue or shanghai)
 python Evaluate.py --dataset_type ped2 --model_dir your_model.pth
+
+We also provide the pre-trained models and the labels of UCSD Ped2, Avenue and ShanghaiTech datasets at https://pan.baidu.com/s/1tbWJeJwIWVfTIJ0kcsj1aw (password：mnxg). To test these models, you need download and put them in exp\dataset_type\checkpoint folder.
+
+
